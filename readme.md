@@ -13,8 +13,7 @@ It's an AI-powered insulin dosage assistant agent for Type 1 diabetes, built wit
 3. A 3-step ADK agent pipeline (recipe → carb → insulin) calculates the Apidra dose. (an estimated guess, backed by some calculations)
 4. Result is shown in the Streamlit UI.
 
-
-<img width="2816" height="1536" alt="Logic_Flow" src="https://github.com/user-attachments/assets/2a220ad0-c0c8-48f7-9cc9-6facd883d99b" />
+<img width="2816" height="1536" alt="Gemini_Generated_Image_nhx1x2nhx1x2nhx1" src="https://github.com/user-attachments/assets/40d20443-d6e1-46a3-918b-ffaa0757e16c" />
 
 ---
 
