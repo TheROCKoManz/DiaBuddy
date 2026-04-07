@@ -1,11 +1,9 @@
 # -----------------------------
 # Configuration
 # -----------------------------
-SHELL       := /bin/bash
-PROJECT_ID  := your-gcp-project-id
-REGION      := your-region          # e.g. your preferred GCP region
-REPO        := your-artifact-repo   # Artifact Registry repo name
-IMAGE_NAME  := your-image-name
+SHELL := /bin/bash
+-include .env
+export PROJECT_ID REGION REPO IMAGE_NAME
 IMAGE_TAG   := latest
 IMAGE       := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/$(IMAGE_NAME):$(IMAGE_TAG)
 
