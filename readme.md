@@ -1,6 +1,6 @@
 # DiaBuddy
 
-Just a simple helper guide project built for my lovely fianceé. When managing insulin dosage gets difficult on the go, this tool can be very useful!
+Just a simple helper guide project built for my lovely fiancée. When managing insulin dosage gets difficult on the go, this tool can be very useful!
 
 It's an AI-powered insulin dosage assistant agent for Type 1 diabetes, built with Google ADK, FastAPI, and Streamlit. Deployed on Cloud Run behind nginx.
 
