@@ -10,7 +10,7 @@ IMAGE       := $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO)/$(IMAGE_NAME):$(IM
 # -----------------------------
 # Targets
 # -----------------------------
-.PHONY: all build deploy url secrets grant-secrets set-url clean
+.PHONY: all build deploy url secrets grant-secrets set-url logs dev clean
 
 # Build and push the Docker image for Cloud Run (amd64)
 build:
@@ -30,7 +30,7 @@ deploy:
 		--port 8080 \
 		--memory 512Mi \
 		--cpu 2 \
-		--timeout 1200 \
+		--timeout 1000 \
 		--concurrency 80 \
 		--allow-unauthenticated \
 		--set-secrets GOOGLE_API_KEY=diabuddy-google-api-key:latest,GOOGLE_OAUTH_CLIENT_ID=diabuddy-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=diabuddy-oauth-client-secret:latest,ALLOWED_EMAILS=diabuddy-allowed-emails:latest \
@@ -53,9 +53,6 @@ url:
 		--project $(PROJECT_ID) \
 		--region $(REGION) \
 		--format='value(status.url)'
-
-# Convenience: build, deploy, then fix the APP_BASE_URL
-all: build deploy set-url
 
 # ---------------------------------------------------------------------------
 # One-time setup helpers
@@ -98,6 +95,29 @@ grant-secrets:
 	done
 	@echo "Done."
 
+
+# Convenience: build, deploy, then fix the APP_BASE_URL
+all: build deploy set-url secrets grant-secrets
+
+# Run the app locally in Docker using your .env file.
+# Builds a local (native arch) image — faster than the amd64 cross-compile build.
+# Open http://localhost:8080 after it starts.
+dev:
+	@# Find the container ID using port 8080 and kill it
+	-docker rm -f $$(docker ps -q --filter "publish=8080") 2>/dev/null
+	docker build -t $(IMAGE_NAME)-local:dev .
+	docker run --rm -p 8080:8080 $(IMAGE_NAME)-local:dev
+
+# Tail the last 50 lines of Cloud Run logs (useful for debugging 502s)
+logs:
+	gcloud run services logs read $(IMAGE_NAME) \
+		--project $(PROJECT_ID) \
+		--region $(REGION) \
+		--limit 50
+
 # Clean local docker image
 clean:
-	docker rmi $(IMAGE) || true
+	@# Find the container ID using port 8080 and kill it
+	-docker rm -f $$(docker ps -q --filter "publish=8080") 2>/dev/null
+	docker rmi $(IMAGE_NAME)-local:dev || true
+
