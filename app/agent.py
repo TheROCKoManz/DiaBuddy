@@ -15,10 +15,21 @@ def calculate_insulin_units(carbs_grams: float, pre_meal_sugar_mgdl: float) -> d
     ISF: 1 unit drops blood sugar by 50 mg/dl.
     Target BG: 100 mg/dl.
     Correction only applied when BG > 150 (high) or < 70 (hypo risk).
+
+    Safety caps:
+    - Carb estimate capped at 200g per meal to guard against LLM overestimation.
+    - Total dose capped at 15 units. Meals requiring more should be split or
+      verified with a physician.
     """
-    ICR = 15.0   # grams of carbs per unit
-    ISF = 50.0   # mg/dl drop per unit
-    TARGET_BG = 100.0
+    ICR = 15.0       # grams of carbs per unit
+    ISF = 50.0       # mg/dl drop per unit
+    TARGET_BG = 120.0
+    MAX_CARBS_G = 200.0   # safety ceiling on AI carb estimate
+    MAX_DOSE_UNITS = 15.0  # hard cap — doses above this need physician review
+
+    # Warn if the AI carb estimate looks unrealistically high
+    carbs_capped = carbs_grams > MAX_CARBS_G
+    carbs_grams = min(carbs_grams, MAX_CARBS_G)
 
     carbs_units = carbs_grams / ICR
 
@@ -28,25 +39,44 @@ def calculate_insulin_units(carbs_grams: float, pre_meal_sugar_mgdl: float) -> d
     elif pre_meal_sugar_mgdl < 70:
         correction_units = -1.0
 
-    total_safe_units = max(0.0, carbs_units + correction_units)
+    raw_total = carbs_units + correction_units
+    dose_capped = raw_total > MAX_DOSE_UNITS
+    total_safe_units = max(0.0, min(raw_total, MAX_DOSE_UNITS))
 
     # Estimated BG rise from food alone (without insulin), using ISF/ICR ratio.
     # Formula: each gram of carbs raises BG by ISF/ICR mg/dl.
     estimated_bg_rise = round(carbs_grams * (ISF / ICR), 0)
     estimated_peak_bg = round(pre_meal_sugar_mgdl + estimated_bg_rise, 0)
 
+    safety_warnings = [
+        "CRITICAL: This is an AI estimation. DO NOT overdose. "
+        "Monitor for hypoglycemia, specially if injecting large amounts. "
+        "Target level ~100 mg/dl. Please consult with your endocrinologist."
+    ]
+    if carbs_capped:
+        safety_warnings.append(
+            "⚠️ SAFETY CAP APPLIED: The AI estimated an unusually high carbohydrate amount. "
+            "The dose has been calculated using a maximum of 200g carbs. "
+            "Please verify the carb count manually before dosing."
+        )
+    if dose_capped:
+        safety_warnings.append(
+            "⚠️ DOSE CAP APPLIED: The calculated dose exceeded 15 units, which is the maximum "
+            "this tool will recommend. Large single doses carry serious hypoglycemia risk. "
+            "Please split the meal or consult your endocrinologist."
+        )
+
     return {
+        "carbs_grams_used": round(carbs_grams, 1),
         "carbs_units_needed": round(carbs_units, 2),
         "corrective_units_needed": round(correction_units, 2),
         "total_apidra_units_recommended": round(total_safe_units, 2),
         "estimated_bg_rise_mgdl": int(estimated_bg_rise),
         "estimated_peak_bg_without_insulin": int(estimated_peak_bg),
-        "safety_warning": (
-            "CRITICAL: This is an AI estimation. DO NOT overdose. "
-            "Monitor for hypoglycemia, specially if injecting large amounts. "
-            "Target level ~100 mg/dl. Please consult with your endocrinologist."
-        ),
+        "safety_warning": " | ".join(safety_warnings),
         "hypo_risk": pre_meal_sugar_mgdl < 70,
+        "carbs_were_capped": carbs_capped,
+        "dose_was_capped": dose_capped,
     }
 
 
@@ -90,6 +120,16 @@ The recipe data from the previous step is:
 For EACH ITEM block, calculate the carbohydrates in grams using its INGREDIENTS and SERVING_SCALE.
 Then sum all items to get the total.
 
+CRITICAL ACCURACY RULES — under-dosing is recoverable; over-dosing can be fatal:
+- Use COOKED weight/volume for rice and lentils, not dry weight. Cooked rice is ~28g carbs per 100g (not 80g).
+- Indian sweets (rasgulla, gulab jamun, etc.): one standard rasgulla is ~25-30g carbs, not more.
+- Dal (lentil dishes): a typical bowl of dal is ~20-30g carbs. Dal makhani is lower-carb than plain dal.
+- Drinks: use actual serving size. 200ml Sprite ≈ 21g carbs.
+- Chicken/paneer/meat dishes: protein only, virtually 0 carbs unless the dish has added sugar/sauce.
+- When uncertain, use the lower end of the realistic range. Do NOT round up.
+- A typical full Indian meal (rice + dal + bread + sabzi) is usually 80-150g carbs total.
+  If your total exceeds 200g for a normal home meal, recalculate — you have likely made an error.
+
 Return your response in this EXACT format and nothing else:
 ITEM_CARBS: <food name>:<carbs_grams>
 ITEM_CARBS: <food name>:<carbs_grams>
@@ -126,8 +166,16 @@ After calling the tool, write your response in this exact structure:
 **Your Apidra Dose: [total_apidra_units_recommended] units** 💉
 
 **Breakdown:**
-- 🍽️ Food coverage: [carbs_units_needed] units  *(for the carbohydrates in your meal)*
+- 🍽️ Food coverage: [carbs_units_needed] units  *(for [carbs_grams_used]g carbohydrates)*
 - 📈 Blood sugar correction: [corrective_units_needed] units  *(to bring your current level toward ~100 mg/dl)*
+
+[If carbs_were_capped is true, insert this block BEFORE the "What will this food do" section:]
+> ⚠️ **Carb estimate was unusually high and has been capped at 200g for safety.**
+> The dose above is based on 200g carbs. Please count the carbs in your meal manually before injecting.
+
+[If dose_was_capped is true, insert this block prominently:]
+> 🚨 **DOSE CAPPED AT 15 UNITS — the raw calculation exceeded this limit.**
+> Injecting more than 15 units at once is dangerous. Please split the meal, reduce portions, or speak to your endocrinologist before dosing.
 
 **What will this food do to your sugar?**
 Without insulin, this meal is estimated to raise your blood sugar by about **[estimated_bg_rise_mgdl] mg/dl**, which would push you to roughly **[estimated_peak_bg_without_insulin] mg/dl**. Your [carbs_units_needed] units of food coverage are calculated to absorb those carbs and keep you stable.
